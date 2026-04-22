@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>משחק זיכרון - שני שחקנים</title>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:       #0a0f2c;
+      --navy-mid:   #111840;
+      --navy-light: #1a2456;
+      --gold:       #c9a84c;
+      --gold-light: #e8c96a;
+      --p1:         #4c9fc9;
+      --p1-light:   #6ab8e8;
+      --p2:         #c94c6a;
+      --p2-light:   #e86a88;
+      --white:      #ffffff;
+      --text-muted: #b0b8d1;
+    }
+
+    body {
+      font-family: 'Heebo', sans-serif;
+      background: var(--navy);
+      color: var(--white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 40px;
+    }
+
+    h1 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 900;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: .9rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    /* ─── SCOREBOARD ─── */
+    .scoreboard {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .player-panel {
+      flex: 1;
+      border-radius: 16px;
+      padding: 16px 20px;
+      text-align: center;
+      border: 2px solid transparent;
+      transition: border-color .3s, transform .3s, box-shadow .3s;
+    }
+
+    .player-panel.p1 { background: rgba(76,159,201,.12); border-color: rgba(76,159,201,.3); }
+    .player-panel.p2 { background: rgba(201,76,106,.12); border-color: rgba(201,76,106,.3); }
+
+    .player-panel.active.p1 {
+      border-color: var(--p1);
+      box-shadow: 0 0 20px rgba(76,159,201,.4);
+      transform: scale(1.03);
+    }
+    .player-panel.active.p2 {
+      border-color: var(--p2);
+      box-shadow: 0 0 20px rgba(201,76,106,.4);
+      transform: scale(1.03);
+    }
+
+    .player-name {
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .p1 .player-name { color: var(--p1-light); }
+    .p2 .player-name { color: var(--p2-light); }
+
+    .player-score {
+      font-size: 2.8rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .p1 .player-score { color: var(--p1-light); }
+    .p2 .player-score { color: var(--p2-light); }
+
+    .player-label {
+      font-size: .75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .turn-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      color: var(--gold);
+      transition: transform .3s;
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    /* ─── STATUS BAR ─── */
+    .status-bar {
+      background: rgba(201,168,76,.1);
+      border: 1px solid rgba(201,168,76,.25);
+      border-radius: 40px;
+      padding: 8px 24px;
+      font-size: .9rem;
+      color: var(--gold-light);
+      font-weight: 700;
+      margin-bottom: 18px;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      transition: all .3s;
+    }
+
+    /* ─── BOARD ─── */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      width: 100%;
+      max-width: 540px;
+    }
+
+    /* ─── CARD ─── */
+    .card {
+      aspect-ratio: 1;
+      perspective: 600px;
+      cursor: pointer;
+    }
+
+    .card.removed {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .card.locked { pointer-events: none; }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform .45s ease;
+      border-radius: 10px;
+    }
+
+    .card.flipped .card-inner { transform: rotateY(180deg); }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    .card-back {
+      background: linear-gradient(145deg, var(--navy-light), var(--navy-mid));
+      border: 2px solid rgba(201,168,76,.25);
+      font-size: 1.4rem;
+      color: rgba(201,168,76,.3);
+    }
+
+    .card-front {
+      background: linear-gradient(145deg, #1e2a5e, #243070);
+      border: 2px solid rgba(201,168,76,.4);
+      font-size: clamp(1.2rem, 3.5vw, 1.8rem);
+      transform: rotateY(180deg);
+    }
+
+    .card.matched .card-front {
+      background: linear-gradient(145deg, #1a3d28, #1e4a30);
+      border-color: rgba(80,200,120,.5);
+    }
+
+    /* ─── BUTTONS ─── */
+    .btn-row {
+      margin-top: 22px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 32px;
+      border: none;
+      border-radius: 40px;
+      font-family: 'Heebo', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      color: var(--navy);
+      box-shadow: 0 6px 20px rgba(201,168,76,.35);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(201,168,76,.5); }
+
+    /* ─── WIN OVERLAY ─── */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10,15,44,.88);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.show { display: flex; }
+
+    .overlay-box {
+      background: var(--navy-mid);
+      border: 2px solid var(--gold);
+      border-radius: 24px;
+      padding: 48px 40px;
+      text-align: center;
+      max-width: 380px;
+      width: 90%;
+      animation: popIn .4s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    @keyframes popIn {
+      from { transform: scale(.7); opacity: 0; }
+      to   { transform: scale(1);  opacity: 1; }
+    }
+
+    .trophy { font-size: 4rem; margin-bottom: 16px; display: block; }
+
+    .overlay-box h2 {
+      font-size: 1.8rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+
+    .overlay-box p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .overlay-scores {
+      display: flex;
+      gap: 16px;
+      margin: 20px 0 28px;
+    }
+
+    .os-box {
+      flex: 1;
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .os-box.p1 { background: rgba(76,159,201,.15); border: 1px solid rgba(76,159,201,.4); }
+    .os-box.p2 { background: rgba(201,76,106,.15); border: 1px solid rgba(201,76,106,.4); }
+
+    .os-name { font-size: .78rem; font-weight: 700; margin-bottom: 4px; }
+    .os-box.p1 .os-name { color: var(--p1-light); }
+    .os-box.p2 .os-name { color: var(--p2-light); }
+
+    .os-num { font-size: 2rem; font-weight: 900; }
+    .os-box.p1 .os-num { color: var(--p1-light); }
+    .os-box.p2 .os-num { color: var(--p2-light); }
+
+    /* countdown ring */
+    .countdown-ring {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--gold);
+      z-index: 10;
+      pointer-events: none;
+      text-shadow: 0 0 12px rgba(201,168,76,.8);
+    }
+    .board-wrap { position: relative; width: 100%; max-width: 540px; }
+
+    @media (max-width: 480px) {
+      .board { gap: 5px; }
+      .card-back, .card-front { border-width: 1px; }
+      .card-front { font-size: 1rem; }
+      .card-back { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>משחק זיכרון</h1>
+<p class="subtitle">שני שחקנים · לוח 6×6 · 18 זוגות</p>
+
+<div class="scoreboard">
+  <div class="player-panel p1 active" id="panel1">
+    <div class="player-name">שחקן 1</div>
+    <div class="player-score" id="score1">0</div>
+    <div class="player-label">זוגות</div>
+  </div>
+  <div class="turn-arrow" id="arrow">◀</div>
+  <div class="player-panel p2" id="panel2">
+    <div class="player-name">שחקן 2</div>
+    <div class="player-score" id="score2">0</div>
+    <div class="player-label">זוגות</div>
+  </div>
+</div>
+
+<div class="status-bar" id="status">תור שחקן 1 — הפוך שני קלפים</div>
+
+<div class="board-wrap">
+  <div class="board" id="board"></div>
+</div>
+
+<div class="btn-row">
+  <button class="btn btn-primary" onclick="initGame()">משחק חדש</button>
+</div>
+
+<!-- Win overlay -->
+<div class="overlay" id="overlay">
+  <div class="overlay-box">
+    <span class="trophy" id="ov-trophy">🏆</span>
+    <h2 id="ov-title">כל הכבוד!</h2>
+    <p id="ov-subtitle"></p>
+    <div class="overlay-scores">
+      <div class="os-box p1">
+        <div class="os-name">שחקן 1</div>
+        <div class="os-num" id="ov-s1">0</div>
+      </div>
+      <div class="os-box p2">
+        <div class="os-name">שחקן 2</div>
+        <div class="os-num" id="ov-s2">0</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="initGame(); document.getElementById('overlay').classList.remove('show')">שחק שוב</button>
+  </div>
+</div>
+
+<script>
+  // ─── Audio ───
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  function playTone(freq, type, startTime, duration, gainVal) {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    gain.gain.setValueAtTime(gainVal, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
+
+  function playWin() {
+    // Happy ascending fanfare: C5 E5 G5 C6
+    const t = audioCtx.currentTime;
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((freq, i) => playTone(freq, 'sine', t + i * 0.13, 0.25, 0.35));
+  }
+
+  function playFail() {
+    // Sad descending: G4 E4 C4
+    const t = audioCtx.currentTime;
+    playTone(392, 'sawtooth', t,        0.18, 0.2);
+    playTone(330, 'sawtooth', t + 0.18, 0.18, 0.2);
+    playTone(262, 'sawtooth', t + 0.36, 0.28, 0.2);
+  }
+
+  function playWinGame() {
+    // Big victory fanfare
+    const t = audioCtx.currentTime;
+    const melody = [523,659,784,659,784,1047];
+    melody.forEach((freq, i) => playTone(freq, 'sine', t + i * 0.12, 0.2, 0.3));
+  }
+
+  function resumeAudio() { if (audioCtx.state === 'suspended') audioCtx.resume(); }
+
+  const EMOJIS = [
+    '🦁','🐯','🦊','🐸','🐬','🦋',
+    '🌸','🌈','⚡','🎸','🎯','🏆',
+    '🍕','🍦','🎃','🚀','💎','🌙'
+  ];
+
+  let cards = [];
+  let flipped = [];
+  let scores = [0, 0];
+  let currentPlayer = 0;
+  let locked = false;
+  let remaining = 18;
+  let flipTimer = null;
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function initGame() {
+    clearTimeout(flipTimer);
+    scores = [0, 0];
+    currentPlayer = 0;
+    flipped = [];
+    locked = false;
+    remaining = 18;
+
+    document.getElementById('score1').textContent = '0';
+    document.getElementById('score2').textContent = '0';
+    updatePanels();
+    setStatus('תור שחקן 1 — הפוך שני קלפים');
+
+    const pairs = shuffle([...EMOJIS, ...EMOJIS]);
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+    cards = [];
+
+    pairs.forEach((emoji, i) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.emoji = emoji;
+      card.dataset.index = i;
+      card.innerHTML = `
+        <div class="card-inner">
+          <div class="card-face card-back">✦</div>
+          <div class="card-face card-front">${emoji}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => onCardClick(card));
+      board.appendChild(card);
+      cards.push(card);
+    });
+  }
+
+  function onCardClick(card) {
+    resumeAudio();
+    if (locked) return;
+    if (card.classList.contains('flipped')) return;
+    if (card.classList.contains('removed')) return;
+    if (flipped.length >= 2) return;
+
+    card.classList.add('flipped');
+    flipped.push(card);
+
+    if (flipped.length === 2) {
+      locked = true;
+      checkMatch();
+    }
+  }
+
+  function checkMatch() {
+    const [a, b] = flipped;
+    const match = a.dataset.emoji === b.dataset.emoji;
+
+    if (match) {
+      scores[currentPlayer]++;
+      document.getElementById(`score${currentPlayer + 1}`).textContent = scores[currentPlayer];
+      remaining--;
+
+      a.classList.add('matched');
+      b.classList.add('matched');
+
+      playWin();
+      setStatus(`✓ זוג נמצא! שחקן ${currentPlayer + 1} ממשיך — תור נוסף`);
+
+      setTimeout(() => {
+        a.classList.add('removed');
+        b.classList.add('removed');
+        flipped = [];
+        locked = false;
+
+        if (remaining === 0) {
+          playWinGame();
+          endGame();
+        } else {
+          setStatus(`תור שחקן ${currentPlayer + 1} — הפוך שני קלפים`);
+        }
+      }, 700);
+
+    } else {
+      playFail();
+      setStatus(`✗ לא תואם — הקלפים יתהפכו תוך שנייה...`);
+
+      flipTimer = setTimeout(() => {
+        a.classList.remove('flipped');
+        b.classList.remove('flipped');
+        flipped = [];
+        currentPlayer = 1 - currentPlayer;
+        updatePanels();
+        locked = false;
+        setStatus(`תור שחקן ${currentPlayer + 1} — הפוך שני קלפים`);
+      }, 1000);
+    }
+  }
+
+  function updatePanels() {
+    document.getElementById('panel1').classList.toggle('active', currentPlayer === 0);
+    document.getElementById('panel2').classList.toggle('active', currentPlayer === 1);
+    document.getElementById('arrow').textContent = currentPlayer === 0 ? '◀' : '▶';
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status').textContent = msg;
+  }
+
+  function endGame() {
+    const [s1, s2] = scores;
+    document.getElementById('ov-s1').textContent = s1;
+    document.getElementById('ov-s2').textContent = s2;
+
+    let trophy, title, subtitle;
+    if (s1 > s2) {
+      trophy = '🏆'; title = 'שחקן 1 מנצח!';
+      subtitle = `${s1} זוגות מול ${s2} זוגות — כל הכבוד!`;
+    } else if (s2 > s1) {
+      trophy = '🏆'; title = 'שחקן 2 מנצח!';
+      subtitle = `${s2} זוגות מול ${s1} זוגות — כל הכבוד!`;
+    } else {
+      trophy = '🤝'; title = 'תיקו!';
+      subtitle = `שני השחקנים גילו ${s1} זוגות — שניכם מנצחים!`;
+    }
+
+    document.getElementById('ov-trophy').textContent = trophy;
+    document.getElementById('ov-title').textContent = title;
+    document.getElementById('ov-subtitle').textContent = subtitle;
+    document.getElementById('overlay').classList.add('show');
+  }
+
+  initGame();
+</script>
+</body>
+</html>
